@@ -1,0 +1,585 @@
+deBruijn.go: 
+
+package main
+
+import (
+	"fmt"
+	"os"
+	"sort"
+	"strings"
+)
+
+// read the input file to get a list of strings, which we will use later to construct the de Bruijn graph
+func ReadDeBruijnInput(input string) []string {
+	content, err := os.ReadFile(input)
+	if err != nil {
+		panic("cannot open file")
+	}
+	contentStr := string(content)
+	lines := strings.Split(contentStr, "\n")
+	return lines[1:]
+}
+
+// takes a list of seqs and returns the de Bruijn represented by a map of string to a list of strings
+func BuildDeBruijn(seqs []string) map[string][]string {
+	deBruijnGraph := make(map[string][]string)
+	for i := range seqs {
+		prefix := seqs[i][:len(seqs[i])-1]
+		suffix := seqs[i][1:]
+		if deBruijnGraph[prefix] == nil {
+			deBruijnGraph[prefix] = make([]string, 1)
+			deBruijnGraph[prefix][0] = suffix
+		} else {
+			deBruijnGraph[prefix] = append(deBruijnGraph[prefix], suffix)
+		}
+	}
+	// sort values
+	for k := range deBruijnGraph {
+		sort.Strings(deBruijnGraph[k])
+	}
+	return deBruijnGraph
+}
+
+func PrintMap(dbg map[string][]string) {
+	// get a list of keys in alphabetical order
+	keys := make([]string, 0)
+	for k := range dbg {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		fmt.Print(k, " -> ")
+		for i := range dbg[k] {
+			if i == len(dbg[k])-1 {
+				fmt.Print(dbg[k][i])
+			} else {
+				fmt.Print(dbg[k][i], ",")
+			}
+		}
+		fmt.Println(" ")
+	}
+}
+
+
+
+eulerianCycle.go: 
+
+package main
+
+import (
+	"os"
+	"strings"
+)
+
+// extract the adjacency list
+func ReadAdjListInput(input string) map[*Node][]*Node {
+	var adjList map[*Node][]*Node = make(map[*Node][]*Node)
+	var nodes map[string]*Node = make(map[string]*Node) // used for finding a Node object from its id (string)
+
+	content, err := os.ReadFile(input)
+	if err != nil {
+		panic("cannot open file")
+	}
+	contentStr := string(content)
+	lines := strings.Split(contentStr, "\n")
+	for i := range lines {
+		// reg, err := regexp.Compile("[^0-9]+")
+		// if err != nil {
+		// 	panic(err)
+		// }
+
+		splitFromArrow := strings.Split(lines[i], " -> ")
+		splitFromComma := strings.Split(splitFromArrow[1], ",")
+
+		// build adjacency list
+		sourceStr := string(splitFromArrow[0])
+		var source *Node
+		// check if this node is already in the adjacency list
+		if nodes[sourceStr] == nil {
+			source = &Node{id: sourceStr}
+			nodes[sourceStr] = source
+		} else {
+			source = nodes[sourceStr]
+		}
+
+		dests := make([]*Node, 0)
+		for j := 0; j < len(splitFromComma); j++ {
+			destStr := string(splitFromComma[j])
+			// check if we've alreayd seen a node with this id before
+			if nodes[destStr] != nil {
+				dests = append(dests, nodes[destStr])
+			} else {
+				dest := Node{id: string(splitFromComma[j])}
+				nodes[destStr] = &dest
+				adjList[&dest] = make([]*Node, 0)
+				dests = append(dests, &dest)
+			}
+		}
+		source.next = dests
+		adjList[source] = dests
+	}
+
+	return adjList
+}
+
+// from a node with unvisited edges, form a cycle
+func FormCycle(source *Node) LinkedList {
+	var cycle LinkedList
+	var root ListNode = ListNode{node: source}
+	cycle.root = &root
+	// start traversing a cycle
+	current := &root
+	for true {
+		// find next unvisited node from the source
+		next := NextUnvisitedNode(current.node)
+		if next != nil {
+			// remove next from the neighbors of the current node
+			current.node.next = current.node.next[1:]
+			// make a new ListNode and add it to the cycle
+			nextlistNode := &ListNode{node: next}
+			current.next = nextlistNode
+			current = nextlistNode
+		} else {
+			break
+		}
+	}
+	return cycle
+}
+
+// Find the node in the cycle that has unvisited edges, if any
+func GetNodeWithUnvistedEdge(cycle LinkedList) *Node {
+	current := cycle.root
+	for current != nil {
+		if len(current.node.next) > 0 {
+			// we've found a node with unvisited edges
+			return current.node
+		}
+		current = current.next
+	}
+	return nil
+}
+
+func EulerianCycle(source *Node) *LinkedList {
+	cycle := FormCycle(source)
+	newStart := GetNodeWithUnvistedEdge(cycle)
+	for newStart != nil {
+		cycle2 := FormCycle(newStart)
+
+		cycle = *MergeCycles(&cycle, &cycle2)
+
+		newStart = GetNodeWithUnvistedEdge(cycle)
+	}
+	return &cycle
+}
+
+
+eulerianPath.go:
+
+package main
+
+// given an adjacency list, find the unbalanced node
+// returns the start and end
+func FindEndPoints(adjList map[*Node][]*Node) (*Node, *Node) {
+	// a balanced node is mapped to zero, since # in_edges = # out_edges
+	// node -> 1: this node is the end
+	// node -> -1: this node is the start
+	balanceMap := make(map[*Node]int)
+	var start *Node
+	var end *Node
+
+	// initialize balance map to have the same number of keys (nodes) as the adjList
+	for n := range adjList {
+		balanceMap[n] = 0
+	}
+
+	// cound in and out edges
+	for n, neighbors := range adjList {
+		// outgoing edges count as -1
+		balanceMap[n] -= len(neighbors)
+		for _, neighbor := range neighbors {
+			// incoming edges count as +1
+			balanceMap[neighbor]++
+		}
+	}
+
+	// find unbalanced nodes:
+	for k, v := range balanceMap {
+		if v == -1 {
+			start = k
+		}
+		if v == 1 {
+			end = k
+		}
+	}
+	return start, end
+}
+
+// adds an edge from end to start
+func ConnectEndToStart(start, end *Node) {
+	if end.next == nil {
+		end.next = make([]*Node, 1)
+		end.next[0] = start
+	} else {
+		end.next = append(end.next, start)
+	}
+}
+
+// find the eulerian path
+func EulerianPath(start, end *Node) *LinkedList {
+	ConnectEndToStart(start, end)
+	cycle := EulerianCycle(start)
+
+	NewListEnd := LocateNewListEnd(cycle, start, end)
+	path := LinkedList{root: NewListEnd.next}
+
+	// set the end
+	NewListEnd.next = nil
+	// the end of path should be connected to the second node in cycle
+	previousEnd := path.GetLast()
+	previousEnd.next = cycle.root.next
+
+	// TraverseCycle(&path)
+
+	return &path
+}
+
+// in a linked list, find where the start and end are connected; they should not be connected in a eulerian path
+// returns the ListNode that contains the end node
+func LocateNewListEnd(cycle *LinkedList, start, end *Node) *ListNode {
+	current := cycle.root
+	var NewListEnd *ListNode
+	for current.next != nil {
+		if current.node == end && current.next.node == start {
+			NewListEnd = current
+		}
+		current = current.next
+	}
+	if NewListEnd == nil {
+		panic("did not find end node")
+	}
+	return NewListEnd
+}
+
+
+LinkedList.go:
+
+package main
+
+import "fmt"
+
+type Node struct {
+	id   string
+	next []*Node
+}
+
+type LinkedList struct {
+	root *ListNode
+}
+
+type ListNode struct {
+	node *Node
+	next *ListNode
+}
+
+// merge two cycles
+func MergeCycles(c1, c2 *LinkedList) *LinkedList {
+	mergedCycle := LinkedList{root: c2.root}
+	// the new start node is the root of c2
+	// find the end of c2
+	end2 := c2.GetLast()
+
+	// find which node in c1 has the same node as the end of c2
+	sameNode := c1.FindNode(end2.node)
+	// the end of c2 is connected to the next node of the same node from c1
+	end2.next = sameNode.next
+	// fmt.Println("the end of c2 is now connected to: ", end2.next.node.id)
+	// the same node from c1 is the end of the merged cycle
+	sameNode.next = nil
+
+	// the end of the merged cycle should be connected to the next node of c1's root
+	endMerged := mergedCycle.GetLast()
+	endMerged.next = c1.root.next
+
+	return &mergedCycle
+}
+
+// find the listnode from L that contains node n
+func (L *LinkedList) FindNode(n *Node) *ListNode {
+	current := L.root
+	for current != nil {
+		if current.node == n {
+			return current
+		}
+		current = current.next
+	}
+	return nil
+}
+
+// return the last node of the linked list L
+func (L *LinkedList) GetLast() *ListNode {
+	current := L.root
+	for current.next != nil {
+		current = current.next
+	}
+	return current
+}
+
+func TraverseCycle(cycle *LinkedList) {
+	current := cycle.root
+	for current != nil {
+		if current.next != nil {
+			fmt.Print(current.node.id, "->")
+		} else {
+			fmt.Print(current.node.id)
+		}
+		current = current.next
+	}
+	fmt.Println(" ")
+}
+
+// find a unvisited node from the source nodes' neighbors
+func NextUnvisitedNode(source *Node) *Node {
+	if len(source.next) != 0 {
+		return source.next[0]
+	} else {
+		return nil
+	}
+}
+
+// pick a node from the adjacency list
+func PickNode(adjList map[*Node][]*Node) *Node {
+	var node *Node
+	for k := range adjList {
+		node = k
+		break
+	}
+	return node
+}
+
+// print the adjacency list nicely
+func PrintAdjList(l map[*Node][]*Node) {
+	for k := range l {
+		fmt.Print(k.id, " -> ")
+		for i := range k.next {
+			fmt.Print(l[k][i].id, " ")
+		}
+		fmt.Println(" ")
+	}
+}
+
+func PrintEdges(edges map[*Node]int) {
+	for k, v := range edges {
+		fmt.Println(k.id, " : ", v)
+	}
+}
+
+
+stringPath.go: 
+
+package main
+
+import (
+	"os"
+	"strings"
+)
+
+// read the input strings from the input file
+// caution: the file should not contain empty lines or be an empty file
+func ReadStrPathInput(input string) []string {
+	content, err := os.ReadFile(input)
+	if err != nil {
+		panic("cannot open file")
+	}
+	contentStr := string(content)
+	lines := strings.Split(contentStr, "\n")
+	return lines
+}
+
+// solve the genome path problem
+func FindPath(strings []string) string {
+	path := strings[0]
+	for i := 1; i < len(strings); i++ {
+		path += strings[i][len(strings[i])-1 : len(strings[i])]
+	}
+	return path
+}
+
+
+
+assembler.go: 
+
+package main
+
+import (
+	"fmt"
+	"os"
+)
+
+// output adjList to file
+func OutputDeBruijnMap(dbMap map[string][]string, output string) {
+	// write to output file
+	f, err := os.Create(output)
+	if err != nil {
+		panic("cannot create output file for the deBruijn graph")
+	}
+	// do not write an empty line at the end
+	counter := 0
+	for k, v := range dbMap {
+		f.WriteString(k)
+		f.WriteString(" -> ")
+		for i, n := range v {
+			if i == len(v)-1 {
+				f.WriteString(n)
+			} else {
+				f.WriteString(n)
+				f.WriteString(",")
+			}
+		}
+		if counter != len(dbMap)-1 {
+			f.WriteString("\n")
+		}
+		counter++
+	}
+}
+
+// converts a linkedList into string
+func LinkedListToStr(path *LinkedList) string {
+	current := path.root
+	strs := make([]string, 0)
+	for current != nil {
+		strs = append(strs, current.node.id)
+		current = current.next
+	}
+	str := FindPath(strs)
+	fmt.Println(str)
+	return str
+}
+
+func main() {
+	input := "input2.txt"
+	seqs := ReadDeBruijnInput(input)
+	deBruijnMap := BuildDeBruijn(seqs)
+	// output deBruijnMap to file, then use that as input for eulerianpath
+	dbOutput := "deBruijnOutput.txt"
+	OutputDeBruijnMap(deBruijnMap, dbOutput)
+
+	adjList := ReadAdjListInput(dbOutput)
+	start, end := FindEndPoints(adjList)
+	path := EulerianPath(start, end)
+
+	// convert linkedlist into string
+	LinkedListToStr(path)
+}
+
+
+
+
+contigs.go: 
+
+package main
+
+import "fmt"
+
+// return a list of non 1-in-1-out nodes
+func FindNodes(adjList map[*Node][]*Node) map[*Node]int {
+	nodes := make(map[*Node]int) // a node is mapped to 1 if it is a 1-in-1-out node; otherwise it is mapped to 0
+
+	outMap := make(map[*Node]int) // maps a node to the number of its outgoing edges
+	inMap := make(map[*Node]int)  // maps a node to the number of its incoming edges
+	for node, neighbors := range adjList {
+		outMap[node] = len(neighbors)
+		for _, neighbor := range neighbors {
+			inMap[neighbor]++
+		}
+	}
+
+	for node := range adjList {
+		if inMap[node] == 1 && outMap[node] == 1 {
+			nodes[node] = 1
+		} else {
+			nodes[node] = 0
+		}
+	}
+	// fmt.Println("traverse the following nodes: ")
+	// for _, n := range nodes {
+	// 	fmt.Println(n.id)
+	// }
+
+	return nodes
+}
+
+// find all non branching paths starting from the start node
+func FindNonBranchingPaths(start *Node, nodes map[*Node]int) []*LinkedList {
+	paths := make([]*LinkedList, 0)
+
+	path := &LinkedList{root: &ListNode{node: start}}
+	for _, w := range start.next {
+		path.Extend(&ListNode{node: w})
+		u := w
+		for nodes[u] == 1 && len(u.next) > 0 {
+			path.Extend(&ListNode{node: u.next[0]})
+			u = u.next[0]
+		}
+		paths = append(paths, path)
+		path = &LinkedList{root: &ListNode{node: start}}
+	}
+
+	return paths
+}
+
+// find all branching paths (contigs) from the graph
+func Contigs(nodes map[*Node]int) []string {
+	paths2D := make([][]*LinkedList, 0)
+	for n, m := range nodes {
+		if m == 0 {
+			ps := FindNonBranchingPaths(n, nodes)
+			paths2D = append(paths2D, ps)
+		}
+	}
+	paths := make([]*LinkedList, 0)
+	for _, ps := range paths2D {
+		for _, p := range ps {
+			paths = append(paths, p)
+			// TraverseCycle(p)
+		}
+	}
+
+	strPaths := make([]string, 0)
+	for _, p := range paths {
+		pStr := LinkedListToStr(p)
+		strPaths = append(strPaths, pStr)
+	}
+	return strPaths
+}
+
+func main() {
+	input := "input2.txt"
+	seqs := ReadDeBruijnInput(input)
+	dbMap := BuildDeBruijn(seqs)
+	// convert dbMap to adj. list
+	dbOutput := "deBruijnOutput.txt"
+	OutputDeBruijnMap(dbMap, dbOutput)
+
+	adjList := ReadAdjListInput(dbOutput)
+	nodes := FindNodes(adjList)
+
+	// var randomStartNode *Node
+	// for k, v := range nodes {
+	// 	if v == 0 {
+	// 		randomStartNode = k
+	// 		break
+	// 	}
+	// }
+	// paths := FindNonBranchingPaths(randomStartNode, nodes)
+	// for _, p := range paths {
+	// 	TraverseCycle(p)
+	// }
+
+	contigs := Contigs(nodes)
+	// print all contigs
+	for _, c := range contigs {
+		fmt.Print(c, " ")
+	}
+
+}

@@ -1,0 +1,652 @@
+problem1: sum 
+package main
+
+import (
+	"os"
+	"strconv"
+	"strings"
+)
+
+func main() {
+	// read input
+	input := "./dataset_647148_2.txt"
+	content, err := os.ReadFile(input)
+	if err != nil {
+		panic("cannot open file")
+	}
+	contentStr := string(content)
+	nums := strings.Fields(contentStr)
+
+	// sum numbers
+	a, err := strconv.Atoi(nums[0])
+	b, err := strconv.Atoi(nums[1])
+	sum := a + b
+
+	// write to output file
+	f, err := os.Create("output.txt")
+	sumStr := strconv.Itoa(sum)
+	f.WriteString(sumStr)
+}
+
+
+problem2: motif search
+package main
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// read the string, k, profile matrix from input file
+func ReadEverything(input string) (string, int, [][]float64) {
+	content, err := os.ReadFile(input)
+	if err != nil {
+		panic("cannot open file")
+	}
+	contentStr := string(content)
+	lines := strings.Split(contentStr, "\n")
+	// line[0] -> string
+	// line[1] -> k
+	// line[2] and onward -> profile matrix
+	// profile matrix: A, C, G, T
+	str := lines[0]
+	k, err := strconv.Atoi(lines[1])
+
+	profileMatrix := make([][]float64, len(lines)-2)
+	for i := 2; i < 6; i++ {
+		line := strings.Split(lines[i], " ")
+		fmt.Println(line)
+
+		floatArr := make([]float64, len(line))
+		for j := 0; j < len(line); j++ {
+			n, err := strconv.ParseFloat(line[j], 64)
+			if err != nil {
+				panic("cannot convert string to float64")
+			}
+			floatArr[j] = n
+		}
+		profileMatrix[i-2] = floatArr
+	}
+	return str, k, profileMatrix
+}
+
+func PrintMatrix(m [][]float64) {
+	for i := 0; i < len(m); i++ {
+		for j := 0; j < len(m[i]); j++ {
+			fmt.Print(m[i][j], ", ")
+		}
+		fmt.Println(" ")
+	}
+}
+
+// given a profile matrix, compute the probability of observing a k-mer
+func Prob(kmer string, m [][]float64) float64 {
+	prob := 1.0
+	for i := 0; i < len(kmer); i++ {
+		switch kmer[i] {
+		case 'A':
+			prob = prob * m[0][i]
+		case 'C':
+			prob = prob * m[1][i]
+		case 'G':
+			prob = prob * m[2][i]
+		case 'T':
+			prob = prob * m[3][i]
+		}
+	}
+	return prob
+}
+
+// find the most probable kmer
+func FindBestKMer(s string, k int, m [][]float64) string {
+	// look at all kmers in s:
+	kmers := make([]string, len(s)-k+1)
+	for i := 0; i < len(s)-k+1; i++ {
+		kmer := s[i : i+k]
+		kmers[i] = kmer
+	}
+
+	bestProb := 0.0
+	bestKmerIndex := 0
+	for i := 0; i < len(kmers); i++ {
+		prob := Prob(kmers[i], m)
+		if prob > bestProb {
+			bestProb = prob
+			bestKmerIndex = i
+		}
+	}
+	return kmers[bestKmerIndex]
+}
+
+func main() {
+	input := "d.txt"
+	s, k, profileMatrix := ReadEverything(input)
+	bestKmer := FindBestKMer(s, k, profileMatrix)
+	fmt.Println(bestKmer)
+}
+
+problem3: randomized motif search
+package main
+
+import (
+	"fmt"
+	"math/rand"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// read the input txt file, returns the number k (for k-mers to be analyzed later), t (the number of dna seqs in the set dna) and the set of DNA sequences
+func ReadInput(input string) (int, int, []string) {
+	content, err := os.ReadFile(input)
+	if err != nil {
+		panic("cannot open file")
+	}
+	contentStr := string(content)
+	lines := strings.Split(contentStr, "\n")
+	// lines[0] -> k t; k -> length of k-mer, t -> number of sequences in the set dna
+	// lines[1:1+t] -> dna
+	kt := strings.Fields(lines[0])
+	k, err := strconv.Atoi(kt[0])
+	t, err := strconv.Atoi(kt[1])
+
+	dna := lines[1 : 1+t]
+	return k, t, dna
+}
+
+// randomly generates a motif set from dna
+func RandMotif(dna []string, k, t int) []string {
+	var motifs []string = make([]string, t)
+	for i := 0; i < t; i++ {
+		// number of k-mers in a sequence = n-k+1 (n=length of sequence)
+		numberKmers := len(dna[i]) - k + 1
+		// the starting position of a random k-mer; 0<=index<numberKmers
+		index := rand.Intn(numberKmers)
+		kmer := dna[i][index : index+k]
+		motifs[i] = kmer
+	}
+	return motifs
+}
+
+// given a set of motifs, generate the corresponding profile matrix (pseudocounts are added)
+func Profile(motifs []string, k, t int) [][]float64 {
+	var profile [][]float64 = make([][]float64, 4) // order: A, C, G, T
+	// initialize the profile matrix
+	for i := 0; i < 4; i++ {
+		profile[i] = make([]float64, k)
+		for j := 0; j < k; j++ {
+			profile[i][j] = 1
+		}
+	}
+	// add counts
+	for i := 0; i < t; i++ {
+		for j := 0; j < k; j++ {
+			switch motifs[i][j] {
+			case 'A':
+				profile[0][j] += 1
+			case 'C':
+				profile[1][j] += 1
+			case 'G':
+				profile[2][j] += 1
+			case 'T':
+				profile[3][j] += 1
+			}
+		}
+	}
+
+	// compute probability
+	for j := 0; j < k; j++ {
+		for i := 0; i < 4; i++ {
+			profile[i][j] /= (float64(t) + 4.0)
+		}
+	}
+
+	return profile
+}
+
+func PrintMatrix(m [][]float64) {
+	for i := 0; i < len(m); i++ {
+		for j := 0; j < len(m[i]); j++ {
+			fmt.Print(m[i][j], ", ")
+		}
+		fmt.Println(" ")
+	}
+}
+
+// given a profile, find the best set of motifs
+func Motifs(profile [][]float64, motifs []string, dna []string, k, t int) []string {
+	bestMotifs := motifs
+	for i := 0; i < t; i++ {
+		// for every possible k-mer in each seq from dna:
+		for j := 0; j < len(dna[i])-k+1; j++ {
+			currentMotif := dna[i][j : j+k]
+			previousProb := Prob(bestMotifs[i], profile)
+			currentProb := Prob(currentMotif, profile)
+			if currentProb > previousProb {
+				bestMotifs[i] = currentMotif
+			}
+		}
+	}
+
+	return bestMotifs
+}
+
+// given a profile matrix, compute the probability of observing a k-mer
+func Prob(kmer string, m [][]float64) float64 {
+	prob := 1.0
+	for i := 0; i < len(kmer); i++ {
+		switch kmer[i] {
+		case 'A':
+			prob = prob * m[0][i]
+		case 'C':
+			prob = prob * m[1][i]
+		case 'G':
+			prob = prob * m[2][i]
+		case 'T':
+			prob = prob * m[3][i]
+		}
+	}
+	return prob
+}
+
+// find the consensus string, given a profile matrix
+func Consensus(profile [][]float64, k int) string {
+	var consensus string
+	for j := 0; j < k; j++ {
+		maxIndex := 0 // index of the most common nucleotide at position j
+		for i := 0; i < 4; i++ {
+			if profile[i][j] > profile[maxIndex][j] {
+				maxIndex = i
+			}
+		}
+		switch maxIndex {
+		case 0:
+			consensus += "A"
+		case 1:
+			consensus += "C"
+		case 2:
+			consensus += "G"
+		case 3:
+			consensus += "T"
+		}
+	}
+	return consensus
+}
+
+// calculate the score of a set of motifs
+func Score(motifs []string, profile [][]float64, k, t int) int {
+	consensus := Consensus(profile, k)
+	score := 0
+	for i := 0; i < t; i++ {
+		for j := 0; j < k; j++ {
+			if motifs[i][j] == consensus[j] {
+				score++
+			}
+		}
+	}
+	return score
+}
+
+// find the best motif
+func RandomizedMotifSearch(dna []string, k, t int) []string {
+	// randomly select motifs:
+	motifs := RandMotif(dna, k, t)
+
+	// motifs = []string{"CCTG", "ACAG", "TTGG", "CAGT"}
+
+	bestMotifs := CopyMotifs(motifs)
+
+	for i := 0; i < 10; i++ {
+		profile := Profile(bestMotifs, k, t)
+
+		motifs = Motifs(profile, motifs, dna, k, t)
+
+		score := Score(motifs, profile, k, t)
+		if score > Score(bestMotifs, profile, k, t) {
+			// fmt.Println("lol")
+			bestMotifs = motifs
+		}
+	}
+
+	return bestMotifs
+}
+
+func CopyMotifs(m []string) []string {
+	r := make([]string, len(m))
+	for i := 0; i < len(m); i++ {
+		r[i] = m[i]
+	}
+	return r
+}
+
+func PrintMotifs(m []string) {
+	for i := 0; i < len(m); i++ {
+		fmt.Println(m[i])
+	}
+}
+
+func main() {
+	k, t, dna := ReadInput("test.txt")
+
+	// run RandomizedMotifSearch 1000 times
+	motifs := RandomizedMotifSearch(dna, k, t)
+	bestMotifs := CopyMotifs(motifs)
+	bestProfile := Profile(bestMotifs, k, t)
+	bestScore := Score(bestMotifs, bestProfile, k, t)
+	for i := 0; i < 1000; i++ {
+		motifs = RandomizedMotifSearch(dna, k, t)
+		profile := Profile(motifs, k, t)
+		score := Score(motifs, profile, k, t)
+
+		if score > bestScore {
+			bestScore = score
+			bestMotifs = motifs
+		}
+	}
+	PrintMotifs(bestMotifs)
+}
+
+
+problem4: gibbs sampling
+main.go: 
+package main
+
+import (
+	"math/rand"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// read the input txt file, returns the number k (for k-mers to be analyzed later), t (the number of sequences in dna), N (number of iterations for randomly generating the k-mer based on the profile probabilities), dna (the set of dna seqs)
+func ReadInput(input string) (int, int, int, []string) {
+	content, err := os.ReadFile(input)
+	if err != nil {
+		panic("cannot open file")
+	}
+	contentStr := string(content)
+	lines := strings.Split(contentStr, "\n")
+	// lines[0] -> k t; k -> length of k-mer, t -> number of sequences in the set dna
+	// lines[1:1+t] -> dna
+	ktN := strings.Fields(lines[0])
+	k, err := strconv.Atoi(ktN[0])
+	t, err := strconv.Atoi(ktN[1])
+	N, err := strconv.Atoi(ktN[2])
+	dna := lines[1 : 1+t]
+	return k, t, N, dna
+}
+
+// randomly generates a motif set from dna
+func RandMotif(dna []string, k, t int) []string {
+	var motifs []string = make([]string, t)
+	for i := 0; i < t; i++ {
+		// number of k-mers in a sequence = n-k+1 (n=length of sequence)
+		numberKmers := len(dna[i]) - k + 1
+		// the starting position of a random k-mer; 0<=index<numberKmers
+		index := rand.Intn(numberKmers)
+		kmer := dna[i][index : index+k]
+		motifs[i] = kmer
+	}
+	return motifs
+}
+
+// given a set of motifs, generate the corresponding profile matrix (pseudocounts are added)
+// note: we need to ignore, randomly, one seq from the motifs
+// returns the profile matrix, the count matrix, and the index of the ignored row
+func Profile(motifs []string, k, t int) ([][]float64, [][]int, int) {
+	// decide which row from the motifs to ignore:
+	luckyRowIndex := rand.Intn(t)
+	// luckyRowIndex = 2
+
+	var counts [][]int = make([][]int, 4)          // order: A, C, G, T
+	var profile [][]float64 = make([][]float64, 4) // order: A, C, G, T
+	// initialize the profile and counts matrix
+	for i := 0; i < 4; i++ {
+		profile[i] = make([]float64, k)
+		counts[i] = make([]int, k)
+		for j := 0; j < k; j++ {
+			profile[i][j] = 1
+			counts[i][j] = 1
+		}
+	}
+	// add counts (ignoring the luckyRow)
+	for i := 0; i < t; i++ {
+		if i != luckyRowIndex {
+			for j := 0; j < k; j++ {
+				switch motifs[i][j] {
+				case 'A':
+					profile[0][j] += 1
+					counts[0][j] += 1
+				case 'C':
+					profile[1][j] += 1
+					counts[1][j] += 1
+				case 'G':
+					profile[2][j] += 1
+					counts[2][j] += 1
+				case 'T':
+					profile[3][j] += 1
+					counts[3][j] += 1
+				}
+			}
+
+		}
+	}
+	// compute probability
+	for j := 0; j < k; j++ {
+		for i := 0; i < 4; i++ {
+			profile[i][j] /= (float64(t-1) + 4.0)
+		}
+	}
+
+	// PrintProfile(profile)
+	// PrintCounts(counts)
+	return profile, counts, luckyRowIndex
+}
+
+// given a profile matrix, compute the probability of observing a k-mer
+func Prob(kmer string, m [][]float64) float64 {
+	prob := 1.0
+	for i := 0; i < len(kmer); i++ {
+		switch kmer[i] {
+		case 'A':
+			prob = prob * m[0][i]
+		case 'C':
+			prob = prob * m[1][i]
+		case 'G':
+			prob = prob * m[2][i]
+		case 'T':
+			prob = prob * m[3][i]
+		}
+	}
+	return prob
+}
+
+// given a counts matrix, compute the product of all counts for a given kmer
+func CountProduct(kmer string, m [][]int) int {
+	prob := 1
+	for i := 0; i < len(kmer); i++ {
+		switch kmer[i] {
+		case 'A':
+			prob = prob * m[0][i]
+		case 'C':
+			prob = prob * m[1][i]
+		case 'G':
+			prob = prob * m[2][i]
+		case 'T':
+			prob = prob * m[3][i]
+		}
+	}
+	return prob
+}
+
+// select a kmer from the ignored row based on the probability of each kmer
+func SelectKmer(luckyRow string, counts [][]int, k int) string {
+	thresholds := make([]int, len(luckyRow)-k+1)
+	sum := 0
+	for i := 0; i < len(thresholds); i++ {
+		thresholds[i] = CountProduct(luckyRow[i:i+k], counts)
+		sum += thresholds[i]
+	}
+
+	for i := 1; i < len(thresholds); i++ {
+		thresholds[i] += thresholds[i-1]
+	}
+
+	// for i := range thresholds {
+	// 	fmt.Print(thresholds[i], " ")
+	// }
+
+	// fmt.Println(thresholds)
+
+	randInt := rand.Intn(sum)
+
+	// fmt.Println(randInt)
+
+	kmerIndex := 0
+	for i := range thresholds {
+		if randInt < thresholds[i] {
+			kmerIndex = i
+			break
+		}
+	}
+
+	// fmt.Println(luckyRow[kmerIndex : kmerIndex+k])
+	return luckyRow[kmerIndex : kmerIndex+k]
+}
+
+// return a new set of k motifs
+func Motifs(prevMotifs []string, luckyRowIndex int, dna []string, counts [][]int, k, t int) []string {
+	// find the missing kmer
+	luckyMotif := SelectKmer(dna[luckyRowIndex], counts, k)
+	motifs := make([]string, t)
+	for i := 0; i < t; i++ {
+		if i == luckyRowIndex {
+			motifs[i] = luckyMotif
+		} else {
+			motifs[i] = prevMotifs[i]
+		}
+	}
+	return motifs
+}
+
+// find the consensus string, given a profile matrix
+func Consensus(profile [][]float64, k int) string {
+	var consensus string
+	for j := 0; j < k; j++ {
+		maxIndex := 0 // index of the most common nucleotide at position j
+		for i := 0; i < 4; i++ {
+			if profile[i][j] > profile[maxIndex][j] {
+				maxIndex = i
+			}
+		}
+		switch maxIndex {
+		case 0:
+			consensus += "A"
+		case 1:
+			consensus += "C"
+		case 2:
+			consensus += "G"
+		case 3:
+			consensus += "T"
+		}
+	}
+	return consensus
+}
+
+// calculate the score of a set of motifs
+func Score(motifs []string, profile [][]float64, k, t int) int {
+	consensus := Consensus(profile, k)
+	score := 0
+	for i := 0; i < t; i++ {
+		for j := 0; j < k; j++ {
+			if motifs[i][j] == consensus[j] {
+				score++
+			}
+		}
+	}
+	return score
+}
+
+// perform Gibbs sampling
+func GibbsSampler(dna []string, k, t, N int) []string {
+	motifs := RandMotif(dna, k, t)
+	bestMotifs := CopyMotifs(motifs)
+	for i := 0; i < N; i++ {
+		profile, counts, luckyRowIndex := Profile(motifs, k, t)
+		motifs = Motifs(bestMotifs, luckyRowIndex, dna, counts, k, t)
+		if Score(motifs, profile, k, t) > Score(bestMotifs, profile, k, t) {
+			bestMotifs = CopyMotifs(motifs)
+		}
+	}
+	return bestMotifs
+}
+
+func main() {
+	input := "sample1.txt"
+	k, t, N, dna := ReadInput(input)
+	// fmt.Println(k, t, N, dna)
+
+	// motifs := RandMotif(dna, k, t)
+	// motifs = []string{"TAAC", "GTCT", "CCGG", "ACTA", "AGGT"}
+	// _, counts, _ := Profile(motifs, k, t)
+	// newMotifs := Motifs(motifs, 2, dna, counts, k, t)
+	// fmt.Println(newMotifs)
+	// bestMotifs := GibbsSampler(dna, k, t, N)
+	// PrintMotifs(bestMotifs)
+
+	// run Gibbs Sampling 20 times
+	motifs := GibbsSampler(dna, k, t, N)
+	bestMotifs := CopyMotifs(motifs)
+	bestProfile, _, _ := Profile(bestMotifs, k, t)
+	bestScore := Score(bestMotifs, bestProfile, k, t)
+	for i := 0; i < 60; i++ {
+		motifs = GibbsSampler(dna, k, t, N)
+		profile, _, _ := Profile(motifs, k, t)
+		score := Score(motifs, profile, k, t)
+
+		if score > bestScore {
+			bestScore = score
+			bestMotifs = CopyMotifs(motifs)
+		}
+	}
+	PrintMotifs(bestMotifs)
+}
+
+helper.go: 
+package main
+
+import "fmt"
+
+func PrintProfile(m [][]float64) {
+	for i := 0; i < len(m); i++ {
+		for j := 0; j < len(m[i]); j++ {
+			fmt.Print(m[i][j], ", ")
+		}
+		fmt.Println(" ")
+	}
+}
+
+func PrintCounts(m [][]int) {
+	for i := 0; i < len(m); i++ {
+		for j := 0; j < len(m[i]); j++ {
+			fmt.Print(m[i][j], ", ")
+		}
+		fmt.Println(" ")
+	}
+}
+
+func CopyMotifs(m []string) []string {
+	r := make([]string, len(m))
+	for i := 0; i < len(m); i++ {
+		r[i] = m[i]
+	}
+	return r
+}
+
+func PrintMotifs(m []string) {
+	for i := 0; i < len(m); i++ {
+		fmt.Println(m[i])
+	}
+}
