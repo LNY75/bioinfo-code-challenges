@@ -1,12 +1,10 @@
-0.289
+0.337
 --------
-A B C D E
+A	B	C	D	E
 --------
--EB-A
--E--D
--EB--
--EE-D
--EB-D
--EB-E
--E--D
--E--D
+BA-BBAEAC
+BA--BBEDC
+BEAB-BD-C
+BE-BB-EDC
+BE-BBBEDC
+BE-B--ED-
