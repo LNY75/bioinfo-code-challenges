@@ -54,7 +54,7 @@ func ReadInput(input string) (int, map[int][][]int) {
 /*
 	given a leave node (integer), find the distances from it to all other leaves in the tree
 */
-func BST(start int, adjL map[int][][]int, n int) []int {
+func BFS(start int, adjL map[int][][]int, n int) []int {
 	D := make([]int, len(adjL))
 	visited := make([]bool, len(adjL))
 	queue := make([]int, 1)
@@ -105,7 +105,7 @@ func main() {
 
 	D := make([][]int, 0)
 	for i := 0; i < n; i++ {
-		D = append(D, BST(i, adjL, n))
+		D = append(D, BFS(i, adjL, n))
 	}
 
 	// fmt.Println(D)
