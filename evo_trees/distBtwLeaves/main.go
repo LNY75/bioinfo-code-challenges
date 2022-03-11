@@ -54,12 +54,60 @@ func ReadInput(input string) (int, map[int][][]int) {
 /*
 	given a leave node (integer), find the distances from it to all other leaves in the tree
 */
-func BST(start int, adjL map[int][]int) {
+func BST(start int, adjL map[int][][]int, n int) []int {
+	D := make([]int, len(adjL))
+	visited := make([]bool, len(adjL))
+	queue := make([]int, 1)
+	queue[0] = start
 
+	current := start
+	visited[start] = true
+
+	for len(queue) != 0 {
+		// examine distance from current node to all its neighbors
+		for _, e := range adjL[current] {
+			neighbor := e[0]
+			distToNeighbor := e[1]
+
+			if !visited[neighbor] {
+				visited[neighbor] = true
+				D[neighbor] = D[current] + distToNeighbor
+				queue = append(queue, neighbor)
+			}
+		}
+		queue = queue[1:]
+		if len(queue) > 0 {
+			current = queue[0]
+		}
+	}
+
+	// fmt.Println(D[:n])
+	return D[:n]
+}
+
+func PrintIntMatrix(s [][]int) {
+	for _, r := range s {
+		for i, e := range r {
+			if i != len(r)-1 {
+				fmt.Print(e, " ")
+			} else {
+				fmt.Print(e)
+			}
+			// fmt.Printf("%6d ", e)
+		}
+		fmt.Println("")
+	}
 }
 
 func main() {
-	input := "input.txt"
-	n, m := ReadInput(input)
-	fmt.Println(n, m)
+	input := "input1.txt"
+	n, adjL := ReadInput(input)
+
+	D := make([][]int, 0)
+	for i := 0; i < n; i++ {
+		D = append(D, BST(i, adjL, n))
+	}
+
+	// fmt.Println(D)
+	PrintIntMatrix(D)
 }
